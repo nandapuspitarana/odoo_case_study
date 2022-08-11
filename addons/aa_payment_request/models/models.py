@@ -42,6 +42,7 @@ class PaymentRequest(models.Model):
                                   'draft': [('readonly', False)]}, track_visibility='onchange')
     department_id = fields.Many2one('hr.department', string='Department',
                                     related='employee_id.department_id', track_visibility='onchange')
+    # ada penambahan di part 2 juga sama
     description = fields.Char('Description', required=True, readonly=True, states={
                               'draft': [('readonly', False)]}, track_visibility='onchange')
     type = fields.Selection([
@@ -95,6 +96,20 @@ class PaymentRequest(models.Model):
     def payment_done(self):
         for o in self:
             return o.write({'state': 'done'})
+
+    # part 2 aap
+    description = fields.Char('Description', required=True, readonly=True, states={
+                              'draft': [('readonly', False)]}, track_visibility='onchange')
+    reason = fields.Text('Reason', readonly=True, states={
+                         'draft': [('readonly', False)]}, track_visibility='onchange')
+    method = fields.Selection([('cash', 'Cash'), ('transfer', 'Transfer')], string='Method',
+                              default='cash', required=True, readonly=True, states={'draft': [('readonly', False)]})
+    account_number = fields.Char('Account Number', readonly=True, states={
+                                 'draft': [('readonly', False)]}, help='No Rekening')
+    account_name = fields.Char('Account Name',  readonly=True, states={
+                               'draft': [('readonly', False)]}, help='Nama Rekening')
+    bank_name = fields.Char('Bank', readonly=True, states={
+                            'draft': [('readonly', False)]}, help='Nama Bank')
 
 
 class PaymentRequestLine(models.Model):
