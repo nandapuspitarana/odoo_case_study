@@ -104,6 +104,19 @@
       <field name="padding">5</field>
     </record>
 
+    <!-- INHERIT BANK STATEMENT -->
+
+    <record id="inherit_bank_statement_line_form" model="ir.ui.view">
+      <field name="name">bank.statement.line.inherit</field>
+      <field name="model">account.bank.statement</field>
+      <field name="inherit_id" ref="account.view_bank_statement_form"/>
+      <field name="arch" type="xml">
+        <field name="payment_ref" position="before">
+          <field name="payment_request_line_id"/>
+        </field>
+      </field>
+    </record>
+
 
     <!-- MENU ITEM -->
 

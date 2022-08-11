@@ -2,6 +2,26 @@ from odoo import api, fields, models, _
 from odoo.addons import decimal_precision as dp
 from odoo.exceptions import UserError, RedirectWarning, ValidationError
 
+
+class AccountMove(models.Model):
+    _inherit = 'account.move'
+
+    payment_request_id = fields.Many2one(
+        'payment.request', 'Payment Request', readonly=True, copy=False)
+
+
+class AccountBankStatement(models.Model):
+    _inherit = 'account.bank.statement'
+
+    def check_confirm_bank(self):
+        for l in self.line_ids:
+            if l.payment_request_line_id.invoice_id:
+                l.payment_request_line_id.invoice_id.payment_request_id = l.payment_request_line_id.payment_request_id.id
+
+        super(AccountBankStatement, self).check_confirm_bank()
+        return self.button_confirm_bank()
+
+
 class PaymentRequest(models.Model):
     _name = 'payment.request'
     _inherit = 'mail.thread'
@@ -97,3 +117,63 @@ class PaymentRequestLine(models.Model):
         if self.invoice_id:
             self.amount = self.invoice_id.amount_total
             self.name = 'Payment Vendor Bill ' + self.invoice_id.partner_id.name
+
+    def name_get(self):
+        res = []
+        for x in self:
+            res.append((x.id, '[%s] %s # Rp. %d' %
+                       (x.payment_request_id.name, x.name, x.amount)))
+        return res
+
+    @api.model
+    def name_search(self, name='', args=None, operator='ilike', limit=100):
+        if operator not in ('ilike', 'like', '=', '=like', '=ilike'):
+            return super(PaymentRequestLine, self).name_search(name, args, operator, limit)
+        args = args or []
+        domain = ['|', ('payment_request_id.name', operator,
+                        name), ('name', operator, name)]
+        recs = self.search(domain + args, limit=limit)
+        return recs.name_get()
+
+
+class AccountBankStatementLine(models.Model):
+    _inherit = "account.bank.statement.line"
+
+    payment_request_line_id = fields.Many2one('payment.request.line', 'Payment Request Line', domain=[
+                                              ('state', '=', 'open'), ('payment_request_id.state', '=', 'done')])
+
+    @api.onchange('payment_request_line_id')
+    def onchange_payment_request_line_id(self):
+        if self.payment_request_line_id:
+            n = -1
+            if self.payment_request_line_id.payment_request_id.type == 'as':
+                n = 1
+            return {
+                'value': {
+                    'payment_ref': self.payment_request_line_id.name,
+                    'ref': self.payment_request_line_id.invoice_id.name or False,
+                    'amount': self.payment_request_line_id.amount * n,
+                    'partner_id': self.payment_request_line_id.invoice_id.partner_id.id or False,
+                }
+            }
+
+    def button_cancel_reconciliation(self):
+        res = super(AccountBankStatementLine,
+                    self).button_cancel_reconciliation()
+
+        for line in self:
+            if line.payment_request_line_id:
+                line.payment_request_line_id.state = 'open'
+                line.payment_request_line_id.payment_request_id.state = 'approve'
+        return res
+
+    def process_reconciliation(self, counterpart_aml_dicts=None, payment_aml_rec=None, new_aml_dicts=None):
+        res = super(AccountBankStatementLine, self).process_reconciliation(
+            counterpart_aml_dicts, payment_aml_rec, new_aml_dicts)
+
+        for line in self:
+            if line.payment_request_line_id:
+                line.payment_request_line_id.state = 'paid'
+                if all([line.state == "paid" for line in line.payment_request_line_id.payment_request_id.payment_line]):
+                    line.payment_request_line_id.payment_request_id.state = 'paid'
+        return res
